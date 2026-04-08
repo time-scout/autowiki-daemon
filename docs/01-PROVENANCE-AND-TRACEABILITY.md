@@ -1,61 +1,57 @@
-# Architectural Decision Record 01: Provenance & Traceability
+# Architectural Decision Record 01: The "Iron Standard" of Provenance & Traceability
 
-## The Problem (The "Black Box" Knowledge)
-In a naive LLM-Wiki, when an agent reads `raw/source.pdf` and updates `wiki/Concept.md`, the connection between the extracted fact and its origin is lost. This creates several unresolvable issues down the line:
-1.  **Verification Impossibility:** A human cannot easily check if the LLM hallucinated a fact without re-reading the entire source document.
-2.  **Orphaned Facts on Source Deletion/Update:** If `source.pdf` is found to be false and deleted, the agent has no systemic way to find and purge *only* the facts derived from it without accidentally deleting manually verified data.
-3.  **Conflict Resolution Blindness:** When Source A says "X=True" and Source B says "X=False", the system cannot programmatically weigh them if it doesn't know *which* text block came from *which* source.
+## The Problem (The Hallucination Gap)
+When an LLM writes a Wiki page directly from a prompt or a web search, it creates untraceable facts. If a user later doubts a paragraph—maybe an API changed, or the LLM hallucinated a configuration parameter—there is no way to verify *where* that fact came from without repeating the entire search process.
 
-## Proposed Solution: Block-Level Citation Syntax & Source Manifest
+The knowledge base becomes a black box of assertions rather than a verifiable repository.
 
-To build a self-compiling knowledge base that can heal itself, we must introduce a **mandatory, machine-readable citation syntax** at the paragraph/block level, coupled with a central registry of ingested sources.
+## Proposed Solution: The "Source Passport" Protocol
 
-### Part 1: The Source Manifest (`schema/sources.json` or YAML)
-Before any source is ingested into the Wiki, it must be registered with a unique ID and critical metadata.
+We implement a strict boundary between "Raw Data" and "Compiled Knowledge." The LLM is mathematically forbidden from committing a fact to the Wiki (`/wiki`) without first generating a local, verified source document in the Inbox (`/inbox`).
 
-```json
-{
-  "src_uuid_12345": {
-    "filename": "raw/2024_api_docs.pdf",
-    "ingestion_date": "2024-10-26T10:00:00Z",
-    "publication_date": "2024-01-01",
-    "author_or_origin": "Acme Corp",
-    "trust_weight": 0.9, // Configurable weight for conflict resolution later
-    "hash": "a1b2c3d4..." // File hash to detect if raw source changed
-  }
-}
-```
+### The Workflow
 
-### Part 2: Markdown Block-Level Citations (`^[src_id]`)
-We enforce a strict rule for the LLM: **Every informational paragraph or list item generated in the `wiki/` directory MUST end with a machine-readable citation.**
+**1. The Ingestion (External or Local)**
+Whether a human drops a PDF into the `/inbox` folder, or an omnivorous Agent (capable of web-browsing, YouTube transcription, or image-to-text) fetches data from the outside world, the first step is identical: the raw data *must* land in the `/inbox`.
 
-We can use the standard Markdown footnote syntax or a custom inline syntax. A clean approach for agents and humans is: `^[src_id]`.
+**2. Formatting: The Iron Standard Naming Convention**
+Agents fetching external data MUST save it using the strict `YYYYMMDD_HASH_SLUG.txt` format.
+*   **YYYYMMDD:** The date of ingestion (staleness tracking).
+*   **HASH:** A 4-character MD5 hash of the slug (uniqueness).
+*   **SLUG:** A readable topic name.
+*   *Example:* `20260408_A1B2_Python_313_Features.txt`
 
-**Example `wiki/Python_Asyncio.md`:**
+The MCP server provides a `format_filename` tool to ensure the Agent gets this exact format right every time.
+
+**3. The Passport Content (Metadata + Raw Text)**
+Inside the `YYYYMMDD_HASH_SLUG.txt` file, the Agent must document:
+*   URL / Origin of the data.
+*   Timestamp.
+*   The raw text/transcript it extracted.
+
+**4. ID Generation and DB Registration (Server-Side)**
+When the Agent calls `commit_updates` to write to the Wiki:
+1. The MCP Server verifies the `filename` provided exists in the `/inbox` and matches the Iron Standard.
+2. The Server reads the file and generates a unique, immutable Source ID (e.g., `src_8F2Awx`).
+3. The Server logs this ID, the file hash, and a "trust weight" into the internal `.autowiki/state.db` SQLite database.
+
+**5. Semantic Compilation & Tagging**
+As the Server writes the Markdown into the `/wiki` directory, it appends the `^[src_id]` tag to every single fact or paragraph derived from that source.
+
+**Example Compiled Output (`wiki/Python.md`):**
 ```markdown
-# Asyncio in Python
+# Python 3.13
 
-Asyncio is a library to write concurrent code using the async/await syntax. It is used as a foundation for multiple Python asynchronous frameworks. ^[src_uuid_12345]
-
-## Event Loop
-The event loop is the core of every asyncio application. Event loops run asynchronous tasks and callbacks, perform network IO operations, and run subprocesses. ^[src_uuid_12345] ^[src_uuid_67890]
+The new JIT compiler improves performance by up to 15% on I/O bound tasks. ^[src_8F2Awx]
 ```
 
-*Note: If a paragraph is a synthesis of two sources, both IDs are appended.*
+**6. Automated Archiving**
+Once the facts are compiled, the server automatically moves the raw `.txt` file from `/inbox` to `/archive`. It is never deleted, ensuring that a human can always cross-reference `src_8F2Awx` to the original full-text source in the archive.
 
-### Part 3: The "Linting" Enforcement (The Hook)
-We cannot just ask the LLM nicely to do this; it will forget. We need a programmatic safety net.
-When the LLM attempts to save a file to the `wiki/` folder, a script (or the MCP server itself) runs a validation check:
-1.  **Regex Check:** Does every non-heading block end with `\^\[src_[a-zA-Z0-9_]+\]`?
-2.  **ID Validation:** Do the cited IDs exist in the Source Manifest?
-3.  **Rejection:** If the validation fails, the save is rejected, and the LLM receives an error prompt: *"Error: Missing or invalid provenance citation in paragraph 2. You must cite your source."*
-
-## Why This Solves The First Bottleneck
-
-By forcing the LLM to write `^[src_id]` at the end of every synthesized thought:
-*   **Foundation for Conflict Resolution (Next Step):** If the LLM tries to update the "Event Loop" paragraph with contradicting data from `src_new_999`, it (or an orchestrator script) can see that the existing text came from `src_uuid_12345`. It can compare the `publication_date` and `trust_weight` of both sources in the manifest before deciding to overwrite, append, or flag a conflict.
-*   **Surgical Deletion:** If `src_uuid_12345` is deprecated, a simple script can `grep` for `\^\[src_uuid_12345\]` across the entire wiki and instruct the LLM: *"Rewrite these specific paragraphs, removing the influence of source 12345."*
+## Why This Solves The Bottleneck
+*   **Zero Hallucinated Origins:** The LLM cannot invent a source ID; the ID is only generated by the server *after* checking that the raw file actually exists on the hard drive.
+*   **Full Lineage:** Any sentence in the Wiki can be traced back to its exact raw snippet and URL.
+*   **Staleness Identification:** Because the date is baked into the Iron Standard filename and the DB, we can easily query for "facts older than 1 year" and direct an Agent to refresh them.
 
 ---
-**Status:** Proposed
-**Next Sequence:** How to handle Contradictions and Truth Verification (ADR-02), relying on this Provenance system.
+**Status:** Implemented in `autowiki/core/db.py` (Pydantic validation) and `autowiki/core/compiler.py` (Source registration).

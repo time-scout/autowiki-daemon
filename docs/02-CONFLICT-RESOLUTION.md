@@ -1,4 +1,4 @@
-# Architectural Decision Record 02: Conflict Resolution & Semantic Integrity
+# Architectural Decision Record 02: Conflict Resolution & Knowledge Evolution
 
 ## The Problem (The Override Dilemma)
 In a naive LLM-Wiki, when an agent ingests `Source B` which contradicts information already written in the Wiki from `Source A`, the agent usually fails in one of three ways:
@@ -6,59 +6,51 @@ In a naive LLM-Wiki, when an agent ingests `Source B` which contradicts informat
 2.  **Cognitive Dissonance:** It appends the new fact next to the old one without acknowledging the contradiction (e.g., "The API rate limit is 100 req/min. The API rate limit is 50 req/min.").
 3.  **Hallucinated Compromise:** It tries to blend them into a false statement (e.g., "The API rate limit is between 50 and 100 req/min.").
 
-## Proposed Solution: The "Truth Verification" Protocol
+## Proposed Solution: The "Truth Verification & Evolution" Protocol
 
 To maintain semantic integrity, the agent must shift from a "Write" mindset to a "Compare & Merge" mindset. We implement a specific prompt pattern and workflow triggered whenever an agent updates an existing Wiki page.
 
 ### The Workflow
 
-**1. The Read-and-Compare Pass**
-Before writing, the agent must extract the facts from the existing Wiki page related to the topic of the new source. It then explicitly compares the *New Claims* against the *Existing Claims*.
+**1. The Read-and-Compare Pass (`get_entity_knowledge`)**
+Before making any updates, the LLM is explicitly required by the Server's system prompt to call `get_entity_knowledge()`. This tool fetches the current state of a given entity (e.g., the existing `Python.md` page). The LLM reads the existing facts and logically compares its *New Claims* against the *Existing Claims*.
 
-**2. Conflict Detection**
-If the agent detects a direct logical contradiction, it must HALT the standard ingestion process and trigger the Conflict Resolution Protocol.
+**2. The Evolution Engine (Four Statuses)**
+Instead of just saying "Edit this file," the LLM must submit an array of specific facts (entities) via `commit_updates(JSON)`. The MCP server enforces four strict status codes for every fact:
 
-### The Resolution Protocol (Relying on ADR-01 Provenance)
+#### Case 1: Status `KEEP` (Consensus)
+*   **Condition:** The new source confirms an existing fact without changing its meaning.
+*   **Action:** The LLM assigns `status: "KEEP"`.
+*   **Server Behavior:** The server does not change the text but appends the new `^[src_B]` ID to the existing `^[src_A]` IDs, increasing the factual weight and confirming consensus.
 
-When a contradiction is found, the agent must look up the `src_id` attached to the existing text (from ADR-01) in the **Source Manifest**. It then compares the metadata of the *Old Source* and the *New Source*.
+#### Case 2: Status `NEW` (Addition)
+*   **Condition:** The new source provides a totally new fact or section not present in the current doc.
+*   **Action:** The LLM assigns `status: "NEW"`.
+*   **Server Behavior:** The server simply appends the new paragraph/bullet with its source tag.
 
-The agent must follow one of three paths based on this comparison:
+#### Case 3: Status `UPDATE` (Evolution)
+*   **Condition:** A fact has organically evolved (e.g., changing from API v1.0 to v2.0, or updating a performance metric).
+*   **Action:** The LLM assigns `status: "UPDATE"`. Crucially, it must provide *both* the new "text" and the "old_text".
+*   **Server Behavior:** We DO NOT DELETE. The server renders the new fact but explicitly archives the old one inline for context.
+*   **Output Example:**
+    > The rate limit is now 50 req/min. ^[src_B] *(Evolution: previously described as "The rate limit is 100 req/min.")*
 
-#### Path A: Temporal or Authority Override
-*   **Condition:** The New Source has a significantly newer `publication_date` OR a higher `trust_weight` (e.g., Official Documentation vs. a Reddit post).
-*   **Action:** The agent overwrites the existing fact with the new one.
-*   **Traceability:** It replaces the old citation `^[src_A]` with the new one `^[src_B]`. 
-*   **Logging:** It MUST write an entry in a central `changelog.md` or a specific section on the page: *"Updated [Fact X] to [Fact Y] because [Source B] is more recent/authoritative than [Source A]."*
-
-#### Path B: The "Rashomon" Fork (Viewpoint Forking)
-*   **Condition:** Both sources have similar weight/dates, or the contradiction represents a difference in opinion, methodology, or edge cases rather than a strict binary truth.
-*   **Action:** The agent explicitly refactors the section to present BOTH viewpoints objectively.
-*   **Example Output:**
+#### Case 4: Status `CONFLICT` (The Hard Stop)
+*   **Condition:** The new source directly contradicts critical logic, infrastructure, or facts from the existing source in a way that implies an error on one side, not an evolution. (e.g., Source A says a setting is true, Source B vehemently says it is false).
+*   **Action:** The LLM assigns `status: "CONFLICT"`. The LLM is explicitly forbidden from trying to merge them.
+*   **Server Behavior:** The server injects a prominent warning block into the Markdown file, tagging it for human review.
+*   **Output Example:**
     ```markdown
-    ### Performance Characteristics
-    There is a divergence in observed performance for this module:
-    * According to internal benchmarks, the throughput is 500 ops/sec. ^[src_internal_tests]
-    * However, third-party audits claim the maximum throughput is only 300 ops/sec under load. ^[src_external_audit]
+    > [!CAUTION] KNOWLEDGE CONFLICT
+    > New evidence from ^[src_B] contradicts existing record:
+    > **New Fact:** The setting `use_tls` must be set to false.
+    > #NEEDS_HUMAN_RESOLUTION
     ```
 
-#### Path C: Human Escalation (The "Hard Stop")
-*   **Condition:** The conflict involves critical infrastructure, security, or core business logic where both sources are highly trusted but mutually exclusive (e.g., "Use Port 8080" vs "Use Port 443").
-*   **Action:** The agent does NOT alter the existing text. Instead, it injects a prominent warning block and tags the file.
-*   **Example Output:**
-    ```markdown
-    > [!WARNING] CONFLICT DETECTED
-    > Existing documentation claims X ^[src_old]. New ingestion attempt from ^[src_new] claims Y. 
-    > **Action Required:** Human review needed to resolve port configuration.
-    
-    #NEEDS_HUMAN_RESOLUTION
-    ```
-
-## Implementation Requirements
-*   **System Prompt Update:** The LLM's core instructions must explicitly detail Paths A, B, and C.
-*   **Tooling:** The agent needs read access to `schema/sources.json` (The Source Manifest) to compare dates and weights *before* making the edit decision.
-*   **CI/CD or Git Hooks:** A script that scans the Wiki for `#NEEDS_HUMAN_RESOLUTION` tags and alerts the repository owner.
+## Why This Works
+*   **Absolute Traceability:** Combined with ADR-01, the system mathematically tracks exactly what changed, when, and because of what specific source file.
+*   **Zero Loss of Context:** The `UPDATE` protocol ensures that the context of "why" something changed is forever baked into the document.
+*   **Human-in-the-Loop Safeguards:** AI hallucinations or bad source documents cannot quietly corrupt the entire Wiki; `CONFLICT` automatically flags anomalies for the user.
 
 ---
-**Status:** Proposed
-**Depends On:** ADR-01 (Provenance & Traceability)
-**Next Sequence:** Addressing Information Bloat through Auto-Sharding (Semantic Splitting) when files grow too large (ADR-03).
+**Status:** Implemented in `autowiki/core/compiler.py` and the `compile_knowledge_base` system prompt.

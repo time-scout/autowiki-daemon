@@ -64,9 +64,7 @@ Detailed architectural decisions are available in the `docs/` folder:
 - [00: Problem Statement](docs/00-PROBLEM-STATEMENT.md)
 - [01: Provenance & Traceability](docs/01-PROVENANCE-AND-TRACEABILITY.md)
 - [02: Conflict Resolution](docs/02-CONFLICT-RESOLUTION.md)
-- [03: Auto-Sharding](docs/03-AUTO-SHARDING.md)
-- [04: Global Index](docs/04-GLOBAL-INDEX.md)
-- [05: Concurrency & Control](docs/05-CONCURRENCY-AND-CONTROL.md)
+- [03: Concurrency & Control](docs/03-CONCURRENCY-AND-CONTROL.md)
 
 ## ⚖️ License
 Distributed under the MIT License. See `LICENSE` for more information.
