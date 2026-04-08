@@ -1,9 +1,33 @@
 import sqlite3
+import json
+import re
 from pathlib import Path
-from typing import Optional
-from pydantic import BaseModel
+from typing import Optional, Dict
+from pydantic import BaseModel, field_validator
 
 DB_NAME = ".autowiki/state.db"
+CONFIG_DIR = Path.home() / ".autowiki"
+CONFIG_FILE = CONFIG_DIR / "config.json"
+
+# Iron Standard Regex: YYYYMMDD_HASH_SLUG.txt (e.g., 20260408_A1B2_George_Benson.txt)
+NAMING_PATTERN = r"^\d{8}_[A-F0-9]{4}_[A-Za-z0-9_-]+\.txt$"
+
+class ConfigManager:
+    @staticmethod
+    def get_config() -> Optional[Dict]:
+        if not CONFIG_FILE.exists():
+            return None
+        try:
+            return json.loads(CONFIG_FILE.read_text())
+        except Exception:
+            return None
+
+    @staticmethod
+    def set_workspace(path: str):
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        config = {"root_path": str(Path(path).expanduser().resolve())}
+        CONFIG_FILE.write_text(json.dumps(config, indent=2))
+        return config
 
 class SourceManifest(BaseModel):
     id: str
@@ -11,10 +35,27 @@ class SourceManifest(BaseModel):
     hash: str
     trust_weight: float = 1.0
 
+    @field_validator("filename")
+    @classmethod
+    def validate_iron_standard(cls, v: str) -> str:
+        if not re.match(NAMING_PATTERN, v):
+            raise ValueError(
+                f"Invalid filename format: '{v}'. "
+                f"Must follow the Iron Standard: YYYYMMDD_HASH_SLUG.txt "
+                f"(e.g., 20260408_A1B2_Topic_Name.txt)"
+            )
+        return v
+
 class StateManager:
     def __init__(self, workspace_dir: Path):
         self.workspace_dir = workspace_dir
         self.db_path = workspace_dir / DB_NAME
+        
+        # Ensure workspace subfolders exist
+        (workspace_dir / "inbox").mkdir(parents=True, exist_ok=True)
+        (workspace_dir / "wiki").mkdir(parents=True, exist_ok=True)
+        (workspace_dir / "archive").mkdir(parents=True, exist_ok=True)
+        
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._init_schema()

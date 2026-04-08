@@ -1,50 +1,63 @@
-# AutoWiki Daemon: The Thin State Machine MCP Server
+# 🧠 AutoWiki Daemon: The Thin State Machine for LLMs
 
-AutoWiki is a deterministic **LLM-Wiki orchestrator** and **Knowledge Base compiler** implemented as a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server. 
+**Stop letting LLMs hallucinate over your notes.** 
 
-Instead of letting an LLM hallucinate file edits, AutoWiki acts as a **reliable intermediary** that enforces data evolution, semantic integrity, and source traceability (provenance).
+AutoWiki is a deterministic Model Context Protocol (MCP) server that transforms any LLM (Claude, Cursor) from a chaotic text-generator into a strict, verifiable **Knowledge Base Compiler**. 
 
-## 🚀 Key Features
+No silent overwrites. No hallucinated facts. Just pure, traceable knowledge evolution.
 
-- **Thin State Machine:** The LLM extracts entities and facts, but the **server** decides how to commit them to the Wiki.
-- **Source Traceability (Provenance):** Every fact in your Wiki is tagged with its source ID (`^[src_...]`).
-- **Conflict Resolution:** Flags logical contradictions between sources and marks them for human review (`#NEEDS_HUMAN_RESOLUTION`).
-- **Git-Backed Audit Trail:** Automatically commits every change to a local Git repo for version control and rollbacks.
-- **SQLite Backend:** Manages a global index of entities and their source lineage.
-- **MCP Native:** Works out-of-the-box with **Claude Desktop**, **Cursor**, and other MCP clients.
+## 🔥 Why AutoWiki? The Problem with AI Agents
+When you ask an AI to update your personal Wiki, it usually fails:
+- ❌ **Silent Overwrites:** It deletes old (but vital) facts to make room for new ones.
+- ❌ **Hallucinations:** It bridges knowledge gaps by making things up.
+- ❌ **Lost Sources:** You have no idea *which* PDF or web search a specific sentence came from.
+
+**AutoWiki fixes this.** It acts as a strict database layer between the LLM and your hard drive. 
+
+## 🛡️ The "Iron Standard" Features
+- **Strict Provenance:** The LLM is mathematically forbidden from adding a fact without an attached **Source Passport**. Every line in your Wiki ends with a traceable tag (e.g., `^[src_8F2A]`).
+- **Knowledge Evolution Protocol:** We do not delete. If a fact changes, AutoWiki archives the old version inline. If two sources contradict, it flags a `#NEEDS_HUMAN_RESOLUTION` caution block.
+- **Git-Backed Audit Trail:** Every semantic update is automatically committed to a local Git repository.
+- **MCP Native:** Drop-in integration with Claude Desktop, Cursor, and any MCP-compatible tool.
+
+## 🚀 Quickstart (Zero to Wiki in 60 seconds)
+
+### 1. Install the Daemon
+```bash
+git clone https://github.com/timescrapper/autowiki-daemon.git
+cd autowiki-daemon
+pip install -e .
+```
+
+### 2. Connect to your MCP Client
+Add this to your Claude Desktop config or Cursor MCP settings:
+```json
+{
+  "mcpServers": {
+    "autowiki": {
+      "command": "autowiki",
+      "args": ["start"]
+    }
+  }
+}
+```
+
+### 3. The Magic (Talk to your AI)
+Open Claude/Cursor and type:
+> *"Initialize my workspace at ~/Desktop/MyBrain. Then search the web for 'Latest Python 3.13 features' and compile it into the wiki."*
+
+**Watch what happens:**
+1. AutoWiki sets up `/inbox`, `/wiki`, and `/archive`.
+2. The AI fetches the data, but AutoWiki forces it to write a stamped **Source Passport** into `/inbox` first.
+3. AutoWiki compiles the facts into beautifully interlinked Markdown in `/wiki` with robust source citations.
 
 ## 📁 Architecture
 
 The system operates on three primary directories:
-- `/inbox`: Drop your raw data (PDFs, Markdown, text) here.
-- `/wiki`: Your compiled, interlinked knowledge base.
-- `/archive`: Processed source files are moved here to avoid redundancy.
-- `/.autowiki`: Internal SQLite state and configurations.
-
-## 🛠️ Getting Started
-
-### Prerequisites
-- Python >= 3.12
-- Git
-
-### Installation
-1. Clone the repository.
-2. Install dependencies:
-   ```bash
-   pip install -e .
-   ```
-
-### Usage
-
-**1. Initialize the workspace:**
-```bash
-autowiki init .
-```
-
-**2. Start the MCP Server:**
-```bash
-autowiki start
-```
+- `/inbox`: Drop your raw data (text, messy notes) here. The LLM reads from here.
+- `/wiki`: Your pristine, compiled, interlinked knowledge base.
+- `/archive`: Processed sources are automatically historically preserved here.
+- `/.autowiki`: Internal SQLite database mapping the graph of entities.
 
 ## 📜 Technical Documentation (ADR)
 Detailed architectural decisions are available in the `docs/` folder:
