@@ -2,7 +2,7 @@
 
 **Stop letting LLMs hallucinate over your notes.** 
 
-AutoWiki is a deterministic Model Context Protocol (MCP) server that transforms any LLM (Claude, Cursor) from a chaotic text-generator into a strict, verifiable **Knowledge Base Compiler**. 
+AutoWiki is a deterministic Model Context Protocol (MCP) server that transforms any LLM (Claude, Cursor, Gemini, Windsurf) from a chaotic text-generator into a strict, verifiable **Knowledge Base Compiler**. 
 
 No silent overwrites. No hallucinated facts. Just pure, traceable knowledge evolution.
 
@@ -18,7 +18,7 @@ When you ask an AI to update your personal Wiki, it usually fails:
 - **Strict Provenance:** The LLM is mathematically forbidden from adding a fact without an attached **Source Passport**. Every line in your Wiki ends with a traceable tag (e.g., `^[src_8F2A]`).
 - **Knowledge Evolution Protocol:** We do not delete. If a fact changes, AutoWiki archives the old version inline. If two sources contradict, it flags a `#NEEDS_HUMAN_RESOLUTION` caution block.
 - **Git-Backed Audit Trail:** Every semantic update is automatically committed to a local Git repository.
-- **MCP Native:** Drop-in integration with Claude Desktop, Cursor, and any MCP-compatible tool.
+- **MCP Native:** Drop-in integration with Claude Desktop, Cursor, Gemini CLI, Windsurf, Roo Code, and other MCP-compatible clients.
 
 ## 🚀 Quickstart (Zero to Wiki in 60 seconds)
 
@@ -29,8 +29,8 @@ cd autowiki-daemon
 pip install -e .
 ```
 
-### 2. Connect to your MCP Client
-Add this to your Claude Desktop config or Cursor MCP settings:
+### 2. Connect to your AI Client
+Add this to your Claude Desktop config, Cursor, Gemini CLI, Windsurf, or Roo Code MCP settings:
 ```json
 {
   "mcpServers": {
@@ -43,7 +43,7 @@ Add this to your Claude Desktop config or Cursor MCP settings:
 ```
 
 ### 3. The Magic (Talk to your AI)
-Open Claude/Cursor and type:
+Open your AI Client (Claude, Cursor, Gemini CLI, etc.) and type:
 > *"Initialize my workspace at ~/Desktop/MyBrain. Then search the web for 'Latest Python 3.13 features' and compile it into the wiki."*
 
 **Watch what happens:**

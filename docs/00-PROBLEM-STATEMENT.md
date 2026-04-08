@@ -1,82 +1,45 @@
-# Problem Statement: The Gap Between "Naive LLM-Wiki" and "Ideal Self-Compiling Knowledge Base"
+# Problem Statement: The Hallucination-Free LLM-Wiki
 
-## Context & Vision
-This document outlines the critical challenges in implementing the **LLM Wiki** design pattern as proposed by Andrej Karpathy ([Gist Link](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)). 
+## The Pain 
+You connect an LLM to your notes, tell it to "manage my wiki," and within days, it creates an untraceable, hallucinated mess. 
 
-The vision is a **Self-Compiling Knowledge Base** where an LLM agent transforms raw, unstructured data into a persistent, structured, and interlinked Wiki. However, current implementations are often "naive"—they handle simple data ingestion but stumble on real-world complexity, data lifecycle, and semantic integrity.
+LLMs are incredible at synthesizing information, but they are terrible at maintaining strict persistent state. When naive AI agents update a knowledge base, they:
+1. **Delete History:** Silently overwrite old facts with new ones, destroying context.
+2. **Hallucinate:** Invent compromises when two sources contradict.
+3. **Lose Provenance:** Orphan facts from their original sources, making the wiki untrustworthy.
+
+Andrej Karpathy proposed the "LLM Wiki" design pattern ([Gist Link](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) to address this. However, implementing this vision in the real world requires a strict "Database Layer" between the LLM and the file system. That is the exact pain AutoWiki solves.
 
 ---
 
 ## 1. Data Evolution & Semantic Integrity (The Core Conflict)
 Most current solutions assume data is additive. In reality, information is volatile.
 
-### A. The Update/Clarification Trap
-*   **Problem:** New data rarely just "adds" to the old. It often **updates, refines, or makes previous statements more massive/volume-heavy.**
-*   **The Stumble:** Agents often treat updates as new entries, leading to internal contradictions within a single page or across the Wiki.
-*   **The Ideal:** A "surgical rewrite" that preserves nuance while removing obsolete facts, maintaining a record of *how* and *why* the information evolved.
+### A. The "Never Delete" Evolution Protocol
+*   **The Problem:** When an API updates from v1 to v2, naive agents delete the v1 documentation to make room for v2.
+*   **The Solution:** Knowledge is a journey. Agents must NEVER delete. Instead, they apply a "surgical update" that preserves the old fact inline as historical context (`*(Evolution: previously described as...)*`). 
 
 ### B. Logical Contradictions
-*   **Problem:** Source A says "X is True," Source B says "X is False." 
-*   **The Stumble:** Agents either ignore the conflict, hallucinate a compromise, or overwrite one with the other without flagging the discrepancy.
-*   **The Ideal:** A "Truth Verification" protocol that flags conflicts, forks viewpoints, or requests human intervention instead of silently failing.
-
-### C. Duplication & "Information Echo"
-*   **Problem:** Receiving the same information from multiple sources (Partial or Full Duplication).
-*   **The Stumble:** Agents create "mirror pages" or redundant paragraphs, cluttering the search space and diluting the authoritative value of the Wiki.
-*   **The Ideal:** Semantic deduplication that recognizes existing facts and merely adds "Confirmation" or "Source Weight" to them.
+*   **The Problem:** Source A says "X is True," Source B says "X is False." 
+*   **The Solution:** A "Truth Verification" protocol. The server forces the agent to explicitly flag the contradiction with a `#NEEDS_HUMAN_RESOLUTION` caution block, rather than hallucinating a false compromise.
 
 ---
 
-## 2. Structural Architecture & Scalability
-How a Wiki grows is as important as what it contains.
-
-### A. Information Bloat (The "Giant File" Problem)
-*   **Problem:** Pages like `Python.md` become unreadably long as more data is ingested.
-*   **The Stumble:** Once a file exceeds the agent's optimal context window, the quality of synthesis drops, and the agent begins to lose track of earlier sections.
-*   **The Ideal:** Automatic "Semantic Splitting"—the agent should proactively refactor the structure, creating sub-pages and hierarchies when a topic becomes too dense.
-
-### B. Granularity vs. Synthesis
-*   **Problem:** Finding the right "atomic unit" of knowledge.
-*   **The Stumble:** Too granular = thousands of tiny files with no connections. Too broad = giant files with lost details.
-*   **The Ideal:** A dynamic balance where the agent manages both "High-level Summaries" and "Deep-dive Details" concurrently.
+## 2. Omnivorous Agent Ingestion (Beyond Local Files)
+*   **The Problem:** Wikis shouldn't just be limited to text files a human manually drops into a folder. 
+*   **The Solution:** The `/inbox` is an API, not just a static folder. If the connected Agent has external capabilities (Web Browsing, YouTube Transcripts, GitHub access, Image Vision), it can fetch that external data on its own. Before writing to the Wiki, the Agent is simply forced to generate a "Source Passport" in the `/inbox` containing the raw external data, giving the system a formal local anchor for provenance.
 
 ---
 
-## 3. Provenance & Metadata (The "Black Box" Knowledge)
+## 3. Provenance & Metadata (The "Iron Standard")
 Knowledge without a source is just a claim.
 
-### A. Traceability (Lineage)
-*   **Problem:** In an LLM-written Wiki, it's hard to tell *which* raw document a specific fact came from.
-*   **The Stumble:** Once "compiled," the connection to the `Raw/` folder is often severed.
-*   **The Ideal:** Every fact or paragraph should be linked back to its source (Hash/ID) for auditing and potential "rollback" if a source is found to be unreliable.
-
-### B. Staleness & Recency
-*   **Problem:** Knowledge decays. What was true in 2024 (e.g., an API version) may be false in 2026.
-*   **The Stumble:** Agents prioritize what they see first or what they find in the current context, often mixing old and new versions of technical data.
-*   **The Ideal:** Mandatory temporal metadata (`source_date`, `last_verified`) used as a primary sorting/weighting factor for all edits.
+### A. Absolute Traceability
+*   **The Problem:** In a typical LLM-written Wiki, it's impossible to tell *which* web page or PDF a specific fact came from.
+*   **The Solution:** The "Iron Standard". The LLM is mathematically forbidden from adding a fact to the Wiki without a verified Source Passport. Every individual fact in the compiled Wiki must end with a traceable tag (e.g., `^[src_8F2A]`).
 
 ---
 
-## 4. Technical & Operational Bottlenecks
-The infrastructure limits of current Agentic AI.
-
-### A. Context Starvation (The "Map-Reduce" Failure)
-*   **Problem:** To update the Wiki correctly, the agent needs to know what is *already* there. But it can't read 1000 files at once.
-*   **The Stumble:** Agents make local edits that break global consistency (e.g., broken cross-links, redundant entity creation).
-*   **The Ideal:** A robust "Global Index/Map" that the agent uses to navigate before acting.
-
-### B. Multi-Agent Race Conditions
-*   **Problem:** Two agents (or an agent and a human) editing the same Wiki page.
-*   **The Stumble:** Overwrites and "lost updates."
-*   **The Ideal:** A version control system (like Git) integrated into the agent's workflow for branching and merging knowledge.
-
----
-
-## Summary
-The "Ideal LLM-Wiki" is not just a collection of Markdown files; it is a **Living Knowledge Ecosystem** that requires:
-1.  **Conflict Resolution Protocol** (Handling contradictions).
-2.  **Semantic Refactoring Logic** (Managing structure).
-3.  **Provenance Tracking** (Tracing sources).
-4.  **Temporal Awareness** (Managing updates).
-
-Current "Gist-based" implementations are mostly **Write-Only** or **Naive-Add**. The real work—the "Wiki-Patrolling"—is currently missing.
+## 4. Multi-Agent Race Conditions
+*   **The Problem:** Two agents (or an agent and a human) editing the same Markdown file simultaneously leads to overwritten logic.
+*   **The Solution:** A strict Model Context Protocol (MCP) server architecture. The server acts as a single-writer State Machine, queuing updates and committing them to a local Git repository to guarantee an uncorrupted audit trail.
