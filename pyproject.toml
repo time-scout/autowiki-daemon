@@ -1,6 +1,6 @@
 [project]
 name = "autowiki-daemon"
-version = "0.2.0"
+version = "0.3.0"
 description = "A deterministic LLM-Wiki orchestrator and knowledge MCP server"
 requires-python = ">=3.10"
 dependencies = [

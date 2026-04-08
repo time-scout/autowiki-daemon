@@ -18,11 +18,16 @@ class MarkdownCompiler:
         self.archive_dir = workspace_dir / "archive"
         self.archive_dir.mkdir(exist_ok=True)
         self.state_manager = state_manager
-        
+
         try:
             self.repo = Repo(self.workspace_dir)
-        except:
-            self.repo = Repo.init(self.workspace_dir)
+        except Exception as repo_err:
+            try:
+                self.repo = Repo.init(self.workspace_dir)
+            except Exception as init_err:
+                # If git is not installed, or other fatal error
+                self.repo = None
+                print(f"Warning: Git initialization failed. Version control is disabled. Error: {init_err}")
 
     def process_updates(self, payload: dict) -> str:
         source_meta = payload.get("source_metadata", {})
@@ -40,12 +45,12 @@ class MarkdownCompiler:
         source_id = f"src_{uuid.uuid4().hex[:8]}"
         file_hash = hashlib.sha256(raw_text.encode()).hexdigest()
         
-        self.state_manager.register_source(SourceManifest(
+        self.state_manager.save_source(SourceManifest(
             id=source_id,
             filename=filename,
             hash=file_hash,
             trust_weight=trust_weight
-        ))
+        ).model_dump())
         
         updates = payload.get("updates", [])
         entities_processed = []
@@ -63,16 +68,17 @@ class MarkdownCompiler:
             if not target_file:
                 safe_name = entity_name.replace(" ", "_")
                 target_file = f"wiki/{safe_name}.md"
-                self.state_manager.add_entity(entity_name, target_file)
-                
+                self.state_manager.upsert_entity(entity_name, target_file)
+
             target_path = self.workspace_dir / target_file
             final_markdown = self._render_markdown(entity_name, entity_updates, source_id)
             target_path.write_text(final_markdown)
             entities_processed.append(entity_name)
-            
+
         shutil.move(str(inbox_file), str(self.archive_dir / filename))
-        self._git_commit(f"AutoWiki: Update via MCP from {filename}")
-        
+        if self.repo:
+            self._git_commit(f"AutoWiki: Update via MCP from {filename}")
+
         return f"Successfully processed {len(entities_processed)} entities from {filename}."
 
     def _render_markdown(self, entity_name: str, updates: list[dict], new_source_id: str) -> str:
