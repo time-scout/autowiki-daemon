@@ -1,3 +1,5 @@
+![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![MCP](https://img.shields.io/badge/protocol-MCP-orange) ![License](https://img.shields.io/badge/license-MIT-green)
+
 # 🧠 AutoWiki Daemon: The Thin State Machine for LLMs
 
 **Stop letting LLMs hallucinate over your notes.** 
