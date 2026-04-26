@@ -21,8 +21,11 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest pytest-asyncio # Autowiki seems to use these
+        pip install pytest pytest-asyncio
+        pip install -e . || echo "No setup.py/pyproject.toml for editable install, using PYTHONPATH instead"
         
     - name: Run tests
+      env:
+        PYTHONPATH: .
       run: |
         pytest
